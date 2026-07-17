@@ -5,11 +5,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
-from .tools import query_db, generate_visualization
+from app.tools import query_db, generate_visualization
 from langgraph.graph.state import CompiledStateGraph
-from dotenv import load_dotenv
-
-load_dotenv()
+from app.config import settings
 
 class ScoutState(TypedDict, total=False):
     messages: Required[Annotated[list[AnyMessage], add_messages]]
@@ -34,6 +32,7 @@ class ScoutAgent:
 
         self.llm = ChatGoogleGenerativeAI(
             model=self.model_name,
+            api_key=settings.GOOGLE_API_KEY,
             temperature=temperature
             ).bind_tools(self.tools)
         
@@ -105,42 +104,42 @@ class ScoutAgent:
         """
         stream the output of the Scout agent.
         """
-        for message_chunk, _metadata in self.runnable.stream(
-            {
-                "messages": [HumanMessage(content=message)],
-            },
+        for chunk, _metadata in self.runnable.stream(
+            {"messages": [HumanMessage(content=message)]},
             stream_mode="messages",
             **kwargs,
         ):
-            if isinstance(message_chunk, AIMessageChunk):
-                if message_chunk.response_metadata:
-                    finish_reason = message_chunk.response_metadata.get("finish_reason", None)
-                    if finish_reason == "tool_calls":
-                        yield "\n\n"
+            
+            if not isinstance(chunk, AIMessageChunk):
+                continue
 
-                tool_call_chunks = getattr(message_chunk, "tool_call_chunks", None)
-                if tool_call_chunks:
-                    tool_chunk = tool_call_chunks[0]
-                    tool_name = getattr(tool_chunk, "name", None)
-                    tool_args = getattr(tool_chunk, "args", None)
+            tool_chunks = getattr(chunk, "tool_call_chunks", None)
 
-                    tool_call_str = ""
-                    if tool_name:
-                        yield f"\n\n< TOOL CALL: {tool_name} >\n\n"
+            if tool_chunks:
+                tool = tool_chunks[0]
+                tool_name = tool.get('name', None)
+                tool_args = tool.get('args', None)
 
-                    if tool_args:
-                        yield str(tool_args)
-                else:
-                    content = message_chunk.content
-                    if isinstance(content, str):
-                        yield content
-                    else:
-                        yield "".join(
-                            block.get("text", "") if isinstance(block, dict) else str(block)
-                            for block in content
-                        )
+                # Print tool call
+                if tool_name:
+                    yield f"\n\n< TOOL CALL: {tool_name} >\n\n"
+        
+                if tool_args:
+                    yield tool_args
 
+                continue
 
+            content = chunk.content
+
+            if isinstance(content, str):
+                yield content
+            else:
+                yield "".join(
+                    block.get("text", "")
+                    for block in content
+                    if isinstance(block, dict)
+                )
+        
 if __name__ == "__main__":
     agent = ScoutAgent(
         name="Scout",

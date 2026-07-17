@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, text, Engine
 import pandas as pd
-from app import config
+from app.config import settings
 from langchain_core.tools import tool
 
 
@@ -20,7 +20,7 @@ class ServerSession:
         if self.engine is None:
             # Configure SQLAlchemy for session pooling
             _engine = create_engine(
-                config.SUPABASE_URL,
+                settings.SUPABASE_URL,
                 pool_size=5,                # Smaller pool size since the pooler manages connections
                 max_overflow=5,             # Fewer overflow connections needed
                 pool_timeout=10,            # Shorter timeout for getting connections
