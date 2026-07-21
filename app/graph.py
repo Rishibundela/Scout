@@ -139,6 +139,7 @@ class ScoutAgent:
                     for block in content
                     if isinstance(block, dict)
                 )
+
         
 if __name__ == "__main__":
     agent = ScoutAgent(
